@@ -42,8 +42,8 @@ python -c "import torch, torchvision; print(torch.__version__, torchvision.__ver
 从项目根目录执行，替换 `--data` 为实际绝对路径：
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python moco/main.py \
-  --data /data/malware_images \
+nohup setsid python moco/main.py \
+  --data /home/linux/7T/lzw/datasets/IDDCNF_datasets/imb_android \
   --output-dir runs/binary_sbcl \
   -a resnet50 \
   --epochs 400 \
@@ -53,7 +53,7 @@ CUDA_VISIBLE_DEVICES=0 python moco/main.py \
   --workers 8 \
   --world-size 1 --rank 0 \
   --dist-url tcp://127.0.0.1:10001 \
-  --multiprocessing-distributed
+  --multiprocessing-distributed > logs/stage1.log 2>&1 &
 ```
 
 原代码默认前 200 个 epoch 使用 KCL，后 200 个 epoch 使用基于类内子类聚类的排序对比损失；每 5 个 epoch 更新一次聚类。上面保留了原项目的 epoch 数、学习率和队列长度。原 README 的 batch size 256 面向多 GPU；单 GPU 命令改用 32，且聚类提取特征时也按同一 batch 分批推理，聚类算法不变。检查点写入 `runs/binary_sbcl/last.pth.tar`；后半阶段结束后此文件就是第二阶段需要的表征权重。

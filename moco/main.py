@@ -6,7 +6,7 @@ import random
 import shutil
 import time
 import warnings
-
+import sys
 import torch
 import torch.nn as nn
 import torch.nn.parallel
@@ -24,7 +24,8 @@ from kmeans_gpu import kmeans
 from imagenet_lt_loader import ImageNetLT_moco
 from utils import*
 from loss import*
-
+# 设置环境变量
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 model_names = sorted(name for name in models.__dict__
     if name.islower() and not name.startswith("__")
     and callable(models.__dict__[name]))
