@@ -28,6 +28,8 @@ model_names = sorted(name for name in models.__dict__
     and callable(models.__dict__[name]))
 
 parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
+parser.add_argument('--data', required=True, help='dataset root containing train/benign, train/mal, val/benign and val/mal')
+parser.add_argument('--output-dir', default='Imagenet', help='directory for classifier checkpoints')
 parser.add_argument('-a', '--arch', metavar='ARCH', default='resnet50',
                     choices=model_names,
                     help='model architecture: ' +
@@ -77,6 +79,9 @@ best_acc1 = 0
 
 def main():
     args = parser.parse_args()
+    if not args.pretrained and not args.resume:
+        parser.error('--pretrained is required for classifier training (or use --resume).')
+    os.makedirs(args.output_dir, exist_ok=True)
 
     if args.seed is not None:
         random.seed(args.seed)
@@ -95,7 +100,8 @@ def main():
     global best_acc1
     # create model
     print("=> creating model '{}'".format(args.arch))
-    num_classes = 1000
+    num_classes = 2
+    args.num_classes = num_classes
     model = models.__dict__[args.arch](num_classes=num_classes)
 
     # freeze all layers but the last fc
@@ -104,7 +110,7 @@ def main():
             param.requires_grad = False
     # init the fc layer
     if args.train_rule == 'DRW':
-         model.fc=NormedLinear_Classifier()
+         model.fc = NormedLinear_Classifier(num_classes=num_classes, feat_dim=model.fc.in_features)
     else:
          model.fc.weight.data.normal_(mean=0.0, std=0.01)
          model.fc.bias.data.zero_()
@@ -131,6 +137,8 @@ def main():
               assert set(msg.missing_keys) == {"fc.weight", "fc.bias"}
 
           print("=> loaded pre-trained model '{}'".format(args.pretrained))
+       else:
+          raise FileNotFoundError(args.pretrained)
 
     model = torch.nn.DataParallel(model).cuda()
 
@@ -168,9 +176,6 @@ def main():
     cudnn.benchmark = True
 
     # Data loading code
-    args.data = 'autodl-tmp/imagenet'
-    txt_train = f'moco/ImageNet_LT_train.txt'
-    txt_test = f'moco/ImageNet_LT_test.txt'
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     train_transform = [
             transforms.RandomResizedCrop(224),
@@ -180,8 +185,7 @@ def main():
         ]
     transform_train = [transforms.Compose(train_transform)]
     train_dataset = ImageNetLT_moco(
-        root=args.data,
-        txt=txt_train,
+        root=os.path.join(args.data, 'train'),
         transform=transform_train)
     args.cls_num_list = train_dataset.cls_num_list
 
@@ -207,34 +211,24 @@ def main():
         ])
     
     vail_dataset =ImageNetLT_val(
-        root=args.data,
-        txt=txt_test,
+        root=os.path.join(args.data, 'val'),
         transform=[vail_transform])
     
     val_loader = torch.utils.data.DataLoader(
         vail_dataset,
         batch_size=args.batch_size, shuffle=False,
-        num_workers=10, pin_memory=True)
+        num_workers=args.workers, pin_memory=True)
+    if not train_loader:
+        raise ValueError('Training split must contain at least one full classifier batch.')
  
     if args.evaluate:
+        criterion = make_criterion(args.start_epoch, args)
         validate(val_loader, model, criterion, args)
         return
 
     for epoch in range(args.start_epoch, args.epochs):
         adjust_learning_rate(optimizer, epoch, args)
-        if args.train_rule == 'CB'or args.train_rule == 'CE' : 
-            per_cls_weights = None 
-            criterion = nn.CrossEntropyLoss().cuda(args.gpu)
-        elif args.train_rule == 'DRW':
-            idx = epoch // 60
-            betas = [0, 0.9999]
-            effective_num = 1.0 - np.power(betas[idx], args.cls_num_list)
-            per_cls_weights = (1.0 - betas[idx]) / np.array(effective_num)
-            per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(args.cls_num_list)
-            per_cls_weights = torch.FloatTensor(per_cls_weights).cuda(args.gpu)
-            criterion = LDAMLoss(cls_num_list=args.cls_num_list, max_m=0.5, s=30, weight=per_cls_weights).cuda(args.gpu)
-        else:
-            warnings.warn('Sample rule is not listed')
+        criterion = make_criterion(epoch, args)
         
         
         
@@ -251,7 +245,8 @@ def main():
             its_ece = ece
         output_best = 'Best Prec@1: %.3f\n' % (best_acc1)
         print(output_best)
-        print(its_ece)
+        if is_best:
+            print(its_ece)
         
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                 and args.rank % ngpus_per_node == 0) :
@@ -261,14 +256,28 @@ def main():
                 'state_dict': model.state_dict(),
                 'best_acc1': best_acc1,
                 'optimizer' : optimizer.state_dict(),
-            }, is_best=False,filename='Imagenet/liner_checkpoint.pth.tar')
+            }, is_best=False,filename=os.path.join(args.output_dir, 'liner_checkpoint.pth.tar'))
+
+
+def make_criterion(epoch, args):
+    if args.train_rule in ('CB', 'CE'):
+        return nn.CrossEntropyLoss().cuda(args.gpu)
+    if args.train_rule == 'DRW':
+        betas = [0, 0.9999]
+        beta = betas[min(epoch // 60, len(betas) - 1)]
+        effective_num = 1.0 - np.power(beta, args.cls_num_list)
+        per_cls_weights = (1.0 - beta) / np.array(effective_num)
+        per_cls_weights = per_cls_weights / np.sum(per_cls_weights) * len(args.cls_num_list)
+        per_cls_weights = torch.FloatTensor(per_cls_weights).cuda(args.gpu)
+        return LDAMLoss(cls_num_list=args.cls_num_list, max_m=0.5, s=30, weight=per_cls_weights).cuda(args.gpu)
+    raise ValueError('Unknown --train_rule: ' + args.train_rule)
         
 def train(train_loader, model, criterion, optimizer, epoch, args):
     batch_time = AverageMeter('Time', ':6.3f')
     data_time = AverageMeter('Data', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
-    top5 = AverageMeter('Acc@5', ':6.2f')
+    top5 = AverageMeter('Acc@2', ':6.2f')
     training_data_num = len(train_loader.dataset)
     epoch_steps = int(training_data_num / args.batch_size)
 
@@ -285,8 +294,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
             break
          # measure data loading time
         data_time.update(time.time() - end)
-        if args.gpu is not None:
-            images = images.cuda(args.gpu, non_blocking=True)
+        images = images.cuda(args.gpu, non_blocking=True)
         target = target.cuda(args.gpu, non_blocking=True)
 
         # compute output
@@ -294,7 +302,7 @@ def train(train_loader, model, criterion, optimizer, epoch, args):
         loss = criterion(output, target)
 
         # measure accuracy and record loss
-        acc1, acc5 = accuracy(output, target, topk=(1, 5))
+        acc1, acc5 = accuracy(output, target, topk=(1, args.num_classes))
         losses.update(loss.item(), images.size(0))
         top1.update(acc1[0], images.size(0))
         top5.update(acc5[0], images.size(0))
@@ -316,7 +324,7 @@ def validate(val_loader, model, criterion, args):
     batch_time = AverageMeter('Time', ':6.3f')
     losses = AverageMeter('Loss', ':.4e')
     top1 = AverageMeter('Acc@1', ':6.2f')
-    top5 = AverageMeter('Acc@5', ':6.2f')
+    top5 = AverageMeter('Acc@2', ':6.2f')
     progress = ProgressMeter(
         len(val_loader),
         [batch_time, losses, top1, top5],
@@ -324,7 +332,7 @@ def validate(val_loader, model, criterion, args):
 
     # switch to evaluate mode
     model.eval()
-    num_classes =1000
+    num_classes = args.num_classes
     class_num = torch.zeros(num_classes).cuda()
     total_logits = torch.empty((0, num_classes)).cuda()
     total_labels = torch.empty(0, dtype=torch.long).cuda()
@@ -333,15 +341,14 @@ def validate(val_loader, model, criterion, args):
     with torch.no_grad():
         end = time.time()
         for i, (images, target) in enumerate(val_loader):
-            if args.gpu is not None:
-                images = images.cuda(args.gpu, non_blocking=True)
+            images = images.cuda(args.gpu, non_blocking=True)
             target = target.cuda(args.gpu, non_blocking=True)
             # compute output
             output = model(images)
             loss = criterion(output, target)
 
             # measure accuracy and record loss
-            acc1, acc5 = accuracy(output, target, topk=(1, 5))
+            acc1, acc5 = accuracy(output, target, topk=(1, args.num_classes))
             losses.update(loss.item(), images.size(0))
             top1.update(acc1[0], images.size(0))
             top5.update(acc5[0], images.size(0))

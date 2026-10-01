@@ -1,4 +1,6 @@
 # [ICCV 2023] Subclass-balancing contrastive learning for long-tailed recognition
+
+使用 `train/benign`、`train/mal`、`val/benign`、`val/mal` 图像目录运行二分类 baseline，请参阅 [REPRODUCE_BINARY.md](REPRODUCE_BINARY.md)。
 [![arXiv](https://img.shields.io/badge/arXiv-Paper-<COLOR>.svg)]([https://arxiv.org/abs/2306.15925])
 
 This repository provides the  code for paper: <br>
