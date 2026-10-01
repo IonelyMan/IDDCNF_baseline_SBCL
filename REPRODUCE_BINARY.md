@@ -58,6 +58,8 @@ nohup setsid python moco/main.py \
 
 原代码默认前 200 个 epoch 使用 KCL，后 200 个 epoch 使用基于类内子类聚类的排序对比损失；每 5 个 epoch 更新一次聚类。上面保留了原项目的 epoch 数、学习率和队列长度。原 README 的 batch size 256 面向多 GPU；单 GPU 命令改用 32，且聚类提取特征时也按同一 batch 分批推理，聚类算法不变。检查点写入 `runs/binary_sbcl/last.pth.tar`；后半阶段结束后此文件就是第二阶段需要的表征权重。
 
+若前半段已完成、在首次聚类时报错，可沿用原命令并追加 `--resume runs/binary_sbcl/last.pth.tar`。程序会从检查点记录的 epoch 继续；例如检查点为第 200 轮时，直接进入聚类阶段，不必重跑前 200 轮。请保持 `--epochs`、`--batch-size`、`--moco-k` 和 `--output-dir` 与原运行一致。
+
 队列长度必须能被全局 batch size 整除；训练集还必须至少能组成一个完整 batch。如果训练集不足 32 张或显存不足，可将 `--batch-size` 改为 16 或 8，并维持 `--moco-k 65536`。这样会改变训练超参数，应记录使用的值。更大的 batch 也需满足整除条件。
 
 第一阶段使用 PyTorch DistributedDataParallel，即使只有一张 GPU，也需要上述 `--world-size`、`--rank` 和 `--multiprocessing-distributed` 参数。`--dist-url` 端口若被占用，改为同机空闲端口即可。

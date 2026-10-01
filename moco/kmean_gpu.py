@@ -93,7 +93,7 @@ def kmeans(
         initial_state_pre = initial_state.clone()
 
         for index in range(num_clusters):
-            selected = torch.nonzero(choice_cluster == index).squeeze().to(device)
+            selected = torch.nonzero(choice_cluster == index).view(-1).to(device)
 
             selected = torch.index_select(X, 0, selected)
 
