@@ -40,7 +40,7 @@ python -c "import torch, torchvision; print(torch.__version__, torchvision.__ver
 ## 4. 第一阶段：SBCL 表征训练
 
 从项目根目录执行，替换 `--data` 为实际绝对路径：
-
+source .venv/bin/activate
 ```bash
 nohup setsid python moco/main.py \
   --data /home/linux/7T/lzw/datasets/IDDCNF_datasets/imb_android \
@@ -53,6 +53,7 @@ nohup setsid python moco/main.py \
   --workers 8 \
   --world-size 1 --rank 0 \
   --dist-url tcp://127.0.0.1:10001 \
+  --resume runs/binary_sbcl/last.pth.tar \
   --multiprocessing-distributed > logs/stage1.log 2>&1 &
 ```
 
@@ -67,8 +68,8 @@ nohup setsid python moco/main.py \
 ## 5. 第二阶段：冻结表征并训练二分类器
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python moco/linear_classify.py \
-  --data /data/malware_images \
+nohup setsid python moco/linear_classify.py \
+  --data /home/linux/7T/lzw/datasets/IDDCNF_datasets/imb_android \
   --pretrained runs/binary_sbcl/last.pth.tar \
   --output-dir runs/binary_linear \
   -a resnet50 \
@@ -78,7 +79,7 @@ CUDA_VISIBLE_DEVICES=0 python moco/linear_classify.py \
   --lr 10 \
   --batch-size 64 \
   --workers 8 \
-  --seed 0
+  --seed 0 > logs/stage2.log 2>&1 &
 ```
 
 `CB` 是原 README 的 ImageNet-LT 线性分类默认流程，使用 ClassAwareSampler。也可按原项目参数指定 `CE` 或 `DRW`，但应在实验记录中注明。原 README 使用 batch size 2048；这里为单 GPU 改为 64。若训练集不够 64 张或显存不足，应继续调小到不超过可用训练样本数；该值属于复现实验参数。模型只训练最后一层 `fc`，验证集每轮评估一次 Top-1 准确率。当前仍会打印原 Top-5 位置对应的 `Acc@2`，二分类时该值没有区分力，请以 `Acc@1` 为准。
@@ -91,12 +92,13 @@ CUDA_VISIBLE_DEVICES=0 python moco/linear_classify.py \
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python moco/linear_classify.py \
-  --data /data/malware_images \
+  --data /home/linux/7T/lzw/datasets/IDDCNF_datasets/imb_android \
   --pretrained runs/binary_sbcl/last.pth.tar \
   --resume runs/binary_linear/liner_checkpoint.pth.tar \
   --output-dir runs/binary_linear \
   --batch-size 64 \
   --workers 8 \
+  --belong zero_test \
   --evaluate
 ```
 

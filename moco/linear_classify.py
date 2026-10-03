@@ -71,7 +71,8 @@ parser.add_argument('--multiprocessing-distributed', action='store_true',
                          'N processes per node, which has N GPUs. This is the '
                          'fastest way to use PyTorch for either single node or '
                          'multi node data parallel training')
-
+parser.add_argument('--belong', default="test", type=str,
+                    help='which dataset to user.')
 parser.add_argument('--pretrained', default='', type=str,
                     help='path to moco pretrained checkpoint')
 best_acc1 = 0
@@ -209,10 +210,14 @@ def main():
             transforms.ToTensor(),
             normalize,
         ])
-    
-    vail_dataset =ImageNetLT_val(
-        root=os.path.join(args.data, 'val'),
-        transform=[vail_transform])
+    if not args.evaluate:
+        vail_dataset =ImageNetLT_val(
+            root=os.path.join(args.data, 'val'),
+            transform=[vail_transform])
+    else:
+        vail_dataset =ImageNetLT_val(
+            root=os.path.join(args.data, args.belong),
+            transform=[vail_transform])
     
     val_loader = torch.utils.data.DataLoader(
         vail_dataset,
