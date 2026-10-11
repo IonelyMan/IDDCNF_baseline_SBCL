@@ -88,6 +88,7 @@ def main():
     parser.add_argument('--data', required=True, help='dataset root containing val/benign and val/mal')
     parser.add_argument('--checkpoint', required=True, help='second-stage liner_checkpoint.pth.tar')
     parser.add_argument('--batch-size', type=int, default=64)
+    parser.add_argument('--belong', type=str, default="test")
     parser.add_argument('--workers', type=int, default=8)
     parser.add_argument('--device', choices=['auto', 'cuda', 'cpu'], default='auto')
     args = parser.parse_args()
@@ -108,7 +109,7 @@ def main():
         transforms.ToTensor(),
         normalize,
     ])
-    dataset = ImageNetLT_val(root=os.path.join(args.data, 'val'), transform=[val_transform])
+    dataset = ImageNetLT_val(root=os.path.join(args.data,args.belong), transform=[val_transform])
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=False,
                         num_workers=args.workers, pin_memory=(device.type == 'cuda'))
     model = load_classifier(args.checkpoint, device)
