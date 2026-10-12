@@ -164,7 +164,8 @@ def main():
         old_meta = Path(absolute_path(args.features_npz)).parent / "metadata.json"
         metadata = json.loads(old_meta.read_text(encoding="utf-8")) if old_meta.exists() else {}
         context = {
-            "model": metadata.get("model") or "Cached features",
+            # "model": metadata.get("model") or "Cached features",
+            "model": "SBCL",
             "layer": metadata.get("feature_layer") or "unspecified_cached_representation",
             "split": metadata.get("split"), "preprocessing": metadata.get("preprocessing"),
             "source": {"checkpoint": metadata.get("checkpoint"),
@@ -174,7 +175,7 @@ def main():
                        "sampling_seed": metadata.get("sampling_seed"),
                        "max_samples": metadata.get("max_samples")},
         }
-    metrics = save_report(args.output_dir, features, labels, ids, context["model"],
+    metrics = save_report(args.output_dir, features, labels, ids, "SBCL",
                           context["layer"], context["source"], context["split"],
                           context["preprocessing"], args.align_alpha, args.uniform_t)
     print(f"Saved {len(labels)} samples to {absolute_path(args.output_dir)}")

@@ -9,12 +9,12 @@
 ## Linux 运行命令
 
 先在项目根目录按 `REPRODUCE_BINARY.md` 建立 Python 3.10 环境并安装 `requirements.txt`。本次补充了 `scipy==1.14.1`。下列路径按真实服务器修改；第二阶段检查点必须已存在。
-
+## 主程序
 ```bash
 CUDA_VISIBLE_DEVICES=0 python visualize_alignment_uniformity.py \
   --checkpoint runs/binary_linear/liner_checkpoint.pth.tar \
   --data_path /home/linux/7T/lzw/datasets/IDDCNF_datasets/imb_android \
-  --split val --max_samples 1024 --seed 0 \
+  --split test --max_samples 1024 --seed 0 \
   --batch_size 64 --workers 8 \
   --output_dir runs/au_report/sbcl_resnet50_linear_val \
   --align_alpha 2 --uniform_t 2
