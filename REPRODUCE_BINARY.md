@@ -103,10 +103,12 @@ CUDA_VISIBLE_DEVICES=0 python moco/linear_classify.py \
 ```
 
 这里的 `--batch-size` 仍需不超过训练图像数，因为原脚本会同时建立训练 DataLoader。报告结果时应明确这是 `val` 集准确率；当前数据结构没有独立测试集。
+
+# 主推理指标程序
 python moco/infer.py \
   --data /home/linux/7T/lzw/datasets/IDDCNF_datasets/imb_android \
   --checkpoint runs/binary_linear/liner_checkpoint.pth.tar \
-  --belong test 
+  --belong zero_test 
 ## 7. 运行边界
 
 - 第一阶段需要 NVIDIA CUDA GPU；原 MoCo 代码通过分布式通信维护队列。
