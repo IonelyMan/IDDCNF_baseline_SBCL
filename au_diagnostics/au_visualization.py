@@ -13,6 +13,7 @@ except OSError:
     # Some restricted Windows installations deny realpath on site-packages.
     matplotlib.__version__ = version("matplotlib")
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap, to_rgba
 import numpy as np
 from scipy.spatial.distance import pdist
 from scipy.special import logsumexp
@@ -147,11 +148,29 @@ def plot_report(output_dir, u, labels, distances, same_mask, metrics, model_name
     groups = ((np.ones(len(labels), dtype=bool), f"All samples (n={len(labels)})"),
               (labels == 0, f"Benign (0) (n={metrics['benign_count']})"),
               (labels == 1, f"Malicious (1) (n={metrics['malicious_count']})"))
+    background = np.asarray(plt.get_cmap("YlGnBu")(0.0))
+    class_colors = ((1, "#c84e2f"), (0, "#2e7d32"))
     for col, (mask, title) in enumerate(groups, start=1):
         points = circle[mask & valid]
         top = fig.add_subplot(grid[0, col])
+        top.set_facecolor(background)
         if len(points):
-            top.contourf(xy_grid, xy_grid, _circle_density(points, xy_grid), 12, cmap="YlGnBu")
+            if col == 1:
+                # Each class has its own KDE scale; draw green last for natural overlap.
+                for class_id, color in class_colors:
+                    class_points = circle[valid & (labels == class_id)]
+                    if len(class_points):
+                        shades = ListedColormap([to_rgba(color, alpha)
+                                                 for alpha in np.linspace(0, 0.85, 12)])
+                        top.contourf(xy_grid, xy_grid, _circle_density(class_points, xy_grid),
+                                     12, cmap=shades, zorder=2 if class_id == 0 else 1)
+            else:
+                color = "#2e7d32" if col == 2 else "#c84e2f"
+                target = np.asarray(to_rgba(color))
+                shades = ListedColormap([(1 - weight) * background + weight * target
+                                         for weight in np.linspace(0, 1, 12)])
+                top.contourf(xy_grid, xy_grid, _circle_density(points, xy_grid),
+                             12, cmap=shades)
         else:
             top.text(0, 0, "No valid points", ha="center", va="center")
         top.plot(np.cos(circle_theta), np.sin(circle_theta), color="gray", linewidth=1)
